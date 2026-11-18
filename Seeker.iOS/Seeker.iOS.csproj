@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>true</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
     <Configurations>Debug;Debug Mock;Release;Release Mock</Configurations>
     <ApplicationTitle>AnimaSeek</ApplicationTitle>
     <ApplicationId>com.animaseek.app</ApplicationId>
