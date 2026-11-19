@@ -44,6 +44,7 @@ jobs:
           if [[ ! -d "${xcode_path}" ]]; then
             echo "Xcode 26.6 was not found."
             echo "Available Xcode installations:"
+
             find /Applications \
               -maxdepth 1 \
               -type d \
@@ -63,6 +64,8 @@ jobs:
       - name: Display .NET environment
         shell: bash
         run: |
+          set -e
+
           dotnet --info
           dotnet workload list
 
@@ -70,15 +73,57 @@ jobs:
         shell: bash
         run: |
           set -e
+
           dotnet workload install ios
 
       - name: Clean previous outputs
         shell: bash
         run: |
+          set -e
+
           rm -rf Seeker.iOS/bin
           rm -rf Seeker.iOS/obj
           rm -rf dist
+
           mkdir -p dist
+
+      - name: Verify required project files
+        shell: bash
+        run: |
+          set -e
+
+          project_file="${GITHUB_WORKSPACE}/Seeker.iOS/Seeker.iOS.csproj"
+          entitlements_file="${GITHUB_WORKSPACE}/Seeker.iOS/Entitlements.plist"
+          info_plist="${GITHUB_WORKSPACE}/Seeker.iOS/Info.plist"
+
+          if [[ ! -f "${project_file}" ]]; then
+            echo "Missing project file: ${project_file}"
+            exit 1
+          fi
+
+          if [[ ! -f "${entitlements_file}" ]]; then
+            echo "Missing entitlements file: ${entitlements_file}"
+            echo "Files present in Seeker.iOS:"
+            find Seeker.iOS -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          if [[ ! -f "${info_plist}" ]]; then
+            echo "Missing Info.plist: ${info_plist}"
+            exit 1
+          fi
+
+          echo "Project file:"
+          ls -lh "${project_file}"
+
+          echo "Entitlements file:"
+          ls -lh "${entitlements_file}"
+
+          echo "Info.plist:"
+          ls -lh "${info_plist}"
+
+          echo "Entitlements contents:"
+          plutil -p "${entitlements_file}"
 
       - name: Restore iPhone runtime
         shell: bash
@@ -104,6 +149,7 @@ jobs:
             --no-restore \
             -p:SupportedOSPlatformVersion=15.0 \
             -p:TargetPlatformMinVersion=15.0 \
+            -p:RuntimeIdentifier=ios-arm64 \
             -p:UseInterpreter=false \
             -p:MtouchLink=Full \
             -p:TrimMode=full \
@@ -111,12 +157,15 @@ jobs:
             -p:ILLinkTreatWarningsAsErrors=true \
             -p:EnableCodeSigning=false \
             -p:ArchiveOnBuild=false \
+            -p:CodesignEntitlements="${GITHUB_WORKSPACE}/Seeker.iOS/Entitlements.plist" \
             2>&1 | tee ios15-build.log
 
       - name: Locate application bundle
         shell: bash
         run: |
           set -e
+
+          output_directory="Seeker.iOS/bin/Release/net10.0-ios/ios-arm64"
 
           echo "Produced application bundles:"
 
@@ -126,7 +175,7 @@ jobs:
             -print
 
           app_bundle="$(
-            find Seeker.iOS/bin/Release/net10.0-ios/ios-arm64 \
+            find "${output_directory}" \
               -type d \
               -name "*.app" \
               -print \
@@ -135,13 +184,19 @@ jobs:
 
           if [[ -z "${app_bundle}" ]]; then
             echo "No iPhone .app bundle was generated."
+            echo "Files generated under ${output_directory}:"
+
+            find "${output_directory}" \
+              -maxdepth 3 \
+              -print
+
             exit 1
           fi
 
-          echo "APP_BUNDLE=${app_bundle}" \
-            >> "${GITHUB_ENV}"
+          echo "Application bundle: ${app_bundle}"
+          echo "APP_BUNDLE=${app_bundle}" >> "${GITHUB_ENV}"
 
-      - name: Verify iOS deployment version
+      - name: Verify application bundle
         shell: bash
         run: |
           set -e
@@ -154,17 +209,24 @@ jobs:
           fi
 
           echo "Application information:"
-          /usr/libexec/PlistBuddy \
-            -c "Print :CFBundleIdentifier" \
-            "${info_plist}"
 
-          /usr/libexec/PlistBuddy \
-            -c "Print :CFBundleShortVersionString" \
-            "${info_plist}"
+          bundle_identifier="$(
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleIdentifier" \
+              "${info_plist}"
+          )"
 
-          /usr/libexec/PlistBuddy \
-            -c "Print :CFBundleVersion" \
-            "${info_plist}"
+          display_version="$(
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleShortVersionString" \
+              "${info_plist}"
+          )"
+
+          build_version="$(
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleVersion" \
+              "${info_plist}"
+          )"
 
           minimum_version="$(
             /usr/libexec/PlistBuddy \
@@ -174,6 +236,16 @@ jobs:
               || true
           )"
 
+          executable_name="$(
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleExecutable" \
+              "${info_plist}"
+          )"
+
+          echo "CFBundleIdentifier=${bundle_identifier}"
+          echo "CFBundleShortVersionString=${display_version}"
+          echo "CFBundleVersion=${build_version}"
+          echo "CFBundleExecutable=${executable_name}"
           echo "MinimumOSVersion=${minimum_version}"
 
           if [[ "${minimum_version}" != "15.0" ]]; then
@@ -181,14 +253,30 @@ jobs:
             exit 1
           fi
 
+          executable_path="${APP_BUNDLE}/${executable_name}"
+
+          if [[ ! -f "${executable_path}" ]]; then
+            echo "Application executable not found: ${executable_path}"
+            exit 1
+          fi
+
+          echo "Application executable:"
+          file "${executable_path}"
+
+          echo "Application bundle size:"
+          du -sh "${APP_BUNDLE}"
+
       - name: Package unsigned IPA
         shell: bash
         run: |
           set -e
 
           staging="${RUNNER_TEMP}/animaseek-ios15"
+          ipa_path="${GITHUB_WORKSPACE}/dist/AnimaSeek-iOS15-unsigned.ipa"
+
           rm -rf "${staging}"
           mkdir -p "${staging}/Payload"
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
 
           cp -R \
             "${APP_BUNDLE}" \
@@ -198,12 +286,20 @@ jobs:
             cd "${staging}"
 
             zip -qry \
-              "${GITHUB_WORKSPACE}/dist/AnimaSeek-iOS15-unsigned.ipa" \
+              "${ipa_path}" \
               Payload
           )
 
-          ls -lh \
-            dist/AnimaSeek-iOS15-unsigned.ipa
+          if [[ ! -f "${ipa_path}" ]]; then
+            echo "The IPA was not generated."
+            exit 1
+          fi
+
+          echo "Generated IPA:"
+          ls -lh "${ipa_path}"
+
+          echo "IPA contents:"
+          unzip -l "${ipa_path}" | head -n 40
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v7
