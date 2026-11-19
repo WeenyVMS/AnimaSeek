@@ -31,19 +31,24 @@ internal static class UIKitFactory
     /// <summary>Applies the shared rounded-content corner treatment to a container view.</summary>
     /// <param name="view">The container to round.</param>
     public static void ApplyRoundedContentCorners(UIView view)
-    {
-        ArgumentNullException.ThrowIfNull(view);
-        view.CornerConfiguration = UICornerConfiguration.CreateUniformCorners(
-            UICornerRadius.CreateFixed(RoundedContentCornerRadius));
-    }
+{
+    ArgumentNullException.ThrowIfNull(view);
+
+    view.Layer.CornerRadius = RoundedContentCornerRadius;
+    view.Layer.MasksToBounds = true;
+}
 
     /// <summary>Applies a capsule corner treatment that follows the view's measured height at every Dynamic Type size.</summary>
     /// <param name="view">The container to shape.</param>
     public static void ApplyCapsuleCorners(UIView view)
-    {
-        ArgumentNullException.ThrowIfNull(view);
-        view.CornerConfiguration = UICornerConfiguration.CreateCapsule();
-    }
+{
+    ArgumentNullException.ThrowIfNull(view);
+
+    // Les contrôles concernés ont une hauteur minimale de 44 points.
+    // Un rayon de 22 points recrée la capsule sous iOS 15.
+    view.Layer.CornerRadius = CircularActionSize / 2.0f;
+    view.Layer.MasksToBounds = true;
+}
 
     /// <summary>The shared size of the circular conversation controls, which is also the touch-target minimum.</summary>
     public const int CircularActionSize = 44;
@@ -92,14 +97,16 @@ internal static class UIKitFactory
     /// A <c>CGColor</c> is a resolved value, not a dynamic color, so the border has to be re-resolved whenever
     /// the interface style flips.
     /// </remarks>
-    public static void ApplyComposerFieldBorder(UIView view)
-    {
-        ArgumentNullException.ThrowIfNull(view);
-        view.Layer.BorderWidth = (nfloat)0.5;
-        view.Layer.BorderColor = UIColor.Separator.GetResolvedColor(view.TraitCollection).CGColor;
-        view.RegisterForTraitChanges<UITraitUserInterfaceStyle>((_, _) =>
-            view.Layer.BorderColor = UIColor.Separator.GetResolvedColor(view.TraitCollection).CGColor);
-    }
+public static void ApplyComposerFieldBorder(UIView view)
+{
+    ArgumentNullException.ThrowIfNull(view);
+
+    view.Layer.BorderWidth = (nfloat)0.5;
+    view.Layer.BorderColor = UIColor.Separator
+        .GetResolvedColor(view.TraitCollection)
+        .CGColor;
+}
+
 
     /// <summary>Anchors an action sheet only where a popover is the platform's own presentation.</summary>
     /// <param name="sheet">The action sheet about to be presented.</param>
@@ -135,11 +142,12 @@ internal static class UIKitFactory
     /// keeps a one-line field visually identical to a capsule while a grown field stays a calm rounded well.
     /// </remarks>
     public static void ApplyGrowingFieldCorners(UIView view)
-    {
-        ArgumentNullException.ThrowIfNull(view);
-        view.CornerConfiguration = UICornerConfiguration.CreateUniformCorners(
-            UICornerRadius.CreateFixed(GrowingFieldCornerRadius));
-    }
+{
+    ArgumentNullException.ThrowIfNull(view);
+
+    view.Layer.CornerRadius = GrowingFieldCornerRadius;
+    view.Layer.MasksToBounds = true;
+}
 
     /// <summary>Creates a self-sizing label that follows Dynamic Type and semantic colors.</summary>
     /// <param name="style">The preferred system text style.</param>
