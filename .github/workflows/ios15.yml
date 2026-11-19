@@ -16,7 +16,7 @@ permissions:
 jobs:
   build:
     name: Build ad-hoc signed iOS 15 IPA
-    runs-on: macos-26
+    runs-on: macos-15-intel
     timeout-minutes: 60
 
     env:
@@ -34,7 +34,41 @@ jobs:
         with:
           dotnet-version: 10.0.302
 
-      - name: Select Xcode 26.6
+            - name: Select available Xcode
+        shell: bash
+        run: |
+          set -e
+
+          echo "Available Xcode installations:"
+          find /Applications \
+            -maxdepth 1 \
+            -type d \
+            -name "Xcode*.app" \
+            -print
+
+          xcode_path="$(
+            find /Applications \
+              -maxdepth 1 \
+              -type d \
+              -name "Xcode_26*.app" \
+              -print |
+              sort -V |
+              tail -n 1
+          )"
+
+          if [[ -z "${xcode_path}" ]]; then
+            echo "No Xcode 26 installation was found."
+            exit 1
+          fi
+
+          echo "Using ${xcode_path}"
+
+          sudo xcode-select \
+            --switch \
+            "${xcode_path}/Contents/Developer"
+
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
         shell: bash
         run: |
           set -e
