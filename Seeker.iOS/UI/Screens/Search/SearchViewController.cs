@@ -193,9 +193,8 @@ internal sealed class SearchViewController : UIViewController, IAppRouteReceivin
         // Dismissing the search field must not discard received results; stopping a running query is an
         // explicit navigation-bar action instead.
         NavigationItem.SearchController = searchController;
-        NavigationItem.HidesSearchBarWhenScrolling = false;
-        NavigationItem.PreferredSearchBarPlacement = UINavigationItemSearchBarPlacement.Stacked;
-        DefinesPresentationContext = true;
+NavigationItem.HidesSearchBarWhenScrolling = false;
+DefinesPresentationContext = true;
     }
 
     private void ConfigureNavigation()
