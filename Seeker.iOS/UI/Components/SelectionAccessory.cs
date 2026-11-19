@@ -117,44 +117,67 @@ internal sealed class SelectionBar : UIToolbar
     /// <summary>Replaces the presented items, showing or hiding the bar to match.</summary>
     /// <param name="items">The items to present, or an empty set to hide the bar.</param>
     /// <param name="animated">Whether the transition animates.</param>
-    public void SetItems(IReadOnlyList<UIBarButtonItem> items, bool animated)
+    public void SetItems(
+    IReadOnlyList<UIBarButtonItem> items,
+    bool animated)
+{
+    ArgumentNullException.ThrowIfNull(items);
+
+    bool visible = items.Count > 0;
+
+    if (visible)
     {
-        ArgumentNullException.ThrowIfNull(items);
-        bool visible = items.Count > 0;
-        if (visible)
+        UIBarButtonItem[] presented =
+            [.. BuildEqualWidthActions(items)];
+
+        Items = presented;
+
+        height.Active = barHeight > 0;
+
+        if (height.Active)
         {
-            UIBarButtonItem[] presented = [.. BuildEqualWidthActions(items)];
-            foreach (UIBarButtonItem item in presented)
-            {
-                // A toolbar draws its own shared glass behind every item. Behind a view that already carries
-                // material that capsule sits slightly proud of the button's own and reads as a halo around it,
-                // and behind the status label it reads as a disc around text that is not pressable. Items with
-                // no view of their own still need it: there the bar's glass is the only material they have.
-                item.HidesSharedBackground = item.CustomView is not null;
-            }
-
-            Items = presented;
-            height.Active = barHeight > 0;
-            if (height.Active)
-            {
-                SetConstant(height, barHeight);
-            }
-
-            controller.View!.BringSubviewToFront(this);
+            SetConstant(
+                height,
+                barHeight);
         }
 
-        UpdateOffset();
-        UpdateContentClearance(visible);
-        if (!animated)
+        controller.View!
+            .BringSubviewToFront(this);
+    }
+    else
+    {
+        Items = [];
+        height.Active = false;
+    }
+
+    UpdateOffset();
+    UpdateContentClearance(visible);
+
+    if (!animated)
+    {
+        Hidden = !visible;
+        Alpha = visible ? 1 : 0;
+        return;
+    }
+
+    Hidden = false;
+
+    Animate(
+        0.2,
+        () =>
+        {
+            Alpha = visible ? 1 : 0;
+        },
+        () =>
         {
             Hidden = !visible;
-            Alpha = visible ? 1 : 0;
-            return;
-        }
 
-        Hidden = false;
-        Animate(0.2, () => Alpha = visible ? 1 : 0, () => Hidden = !visible);
-    }
+            if (!visible)
+            {
+                Items = [];
+            }
+        });
+}
 
     /// <inheritdoc/>
     public override void LayoutSubviews()
@@ -248,45 +271,83 @@ internal sealed class SelectionBar : UIToolbar
     /// <summary>Recreates one titled bar item as a capsule button that forwards to the item's own action.</summary>
     /// <param name="item">The item supplied by the screen.</param>
     /// <returns>A button carrying the item's title, emphasis, enablement, and identifier.</returns>
-    private static UIButton CreateActionButton(UIBarButtonItem item)
-    {
-        bool emphasized = item.Style == UIBarButtonItemStyle.Done;
+    private static UIButton CreateActionButton(
+    UIBarButtonItem item)
+{
+    ArgumentNullException.ThrowIfNull(item);
 
-        // Glass, not a painted capsule: these buttons sit over content beside the tab bar, and a solid fill reads
-        // as a white slab against a light list. The emphasized action keeps the prominent variant.
-        UIButtonConfiguration configuration = emphasized
-            ? UIButtonConfiguration.ProminentGlassButtonConfiguration
-            : UIButtonConfiguration.GlassButtonConfiguration;
-        configuration.Title = item.Title;
-        configuration.CornerStyle = UIButtonConfigurationCornerStyle.Capsule;
-        configuration.TitleLineBreakMode = UILineBreakMode.TailTruncation;
+    bool emphasized =
+        item.Style == UIBarButtonItemStyle.Done;
 
-        // Suppressing the shared background also removes the padding it drew around the action, so the button
-        // takes that padding over and keeps the footprint it presented before, without the second capsule.
-        // Only the horizontal half is expressed here: a glass configuration holds its own height whatever the
-        // vertical insets say, so the bar constrains that instead.
-        NSDirectionalEdgeInsets insets = configuration.ContentInsets;
-        configuration.ContentInsets = new NSDirectionalEdgeInsets(
-            insets.Top,
-            insets.Leading + SharedBackgroundInset,
-            insets.Bottom,
-            insets.Trailing + SharedBackgroundInset);
+    UIButtonConfiguration configuration =
+        emphasized
+        ? UIButtonConfiguration
+            .FilledButtonConfiguration
+        : UIButtonConfiguration
+            .GrayButtonConfiguration;
 
-        var button = UIButton.FromType(UIButtonType.System);
-        button.Configuration = configuration;
-        button.Enabled = item.Enabled;
-        button.AccessibilityLabel = item.AccessibilityLabel ?? item.Title;
-        button.AccessibilityIdentifier = item.AccessibilityIdentifier;
-        button.TranslatesAutoresizingMaskIntoConstraints = false;
-        button.TouchUpInside += (sender, _) =>
+    configuration.Title =
+        item.Title ?? string.Empty;
+
+    configuration.CornerStyle =
+        UIButtonConfigurationCornerStyle.Capsule;
+
+    configuration.TitleLineBreakMode =
+        UILineBreakMode.TailTruncation;
+
+    configuration.ImagePadding = 6;
+
+    NSDirectionalEdgeInsets originalInsets =
+        configuration.ContentInsets;
+
+    configuration.ContentInsets =
+        new NSDirectionalEdgeInsets(
+            originalInsets.Top,
+            originalInsets.Leading +
+                SharedBackgroundInset,
+            originalInsets.Bottom,
+            originalInsets.Trailing +
+                SharedBackgroundInset);
+
+    UIButton button =
+        UIButton.FromType(
+            UIButtonType.System);
+
+    button.Configuration = configuration;
+    button.Enabled = item.Enabled;
+
+    button.AccessibilityLabel =
+        item.AccessibilityLabel
+        ?? item.Title
+        ?? string.Empty;
+
+    button.AccessibilityIdentifier =
+        item.AccessibilityIdentifier;
+
+    button.TranslatesAutoresizingMaskIntoConstraints =
+        false;
+
+    button.TouchUpInside +=
+        (sender, _) =>
         {
-            if (item.Target is { } target && item.Action is { } action)
+            if (item.Target is not
+                    NSObject target ||
+                item.Action is not
+                    ObjCRuntime.Selector action)
             {
-                UIApplication.SharedApplication.SendAction(action, target, sender as NSObject, null);
+                return;
             }
+
+            UIApplication.SharedApplication
+                .SendAction(
+                    action,
+                    target,
+                    sender as NSObject,
+                    null);
         };
-        return button;
-    }
+
+    return button;
+}
 
     /// <summary>Assigns a constraint constant only on a real change, so layout does not feed back into itself.</summary>
     /// <param name="constraint">The constraint to update.</param>
