@@ -341,8 +341,8 @@ internal static class ContentStateView
         button.Layer.CornerRadius = 10;
         button.Layer.MasksToBounds = true;
 
-        button.BackgroundColor =
-            UIColor.TintColor;
+       button.BackgroundColor =
+    UIColor.SystemBlue;
 
         button.SetTitleColor(
             UIColor.White,
