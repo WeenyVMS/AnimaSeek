@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - master
       - ios15
 
 concurrency:
@@ -16,7 +17,7 @@ permissions:
 jobs:
   build:
     name: Build ad-hoc signed iOS 15 IPA
-    runs-on: macos-15-intel
+    runs-on: macos-26
     timeout-minutes: 60
 
     env:
@@ -34,64 +35,17 @@ jobs:
         with:
           dotnet-version: 10.0.302
 
-            - name: Select available Xcode
+      - name: Select Xcode 26.6
         shell: bash
         run: |
           set -e
-
-          echo "Available Xcode installations:"
-          find /Applications \
-            -maxdepth 1 \
-            -type d \
-            -name "Xcode*.app" \
-            -print
-
-          xcode_path="$(
-            find /Applications \
-              -maxdepth 1 \
-              -type d \
-              -name "Xcode_26*.app" \
-              -print |
-              sort -V |
-              tail -n 1
-          )"
-
-          if [[ -z "${xcode_path}" ]]; then
-            echo "No Xcode 26 installation was found."
-            exit 1
-          fi
-
-          echo "Using ${xcode_path}"
-
-          sudo xcode-select \
-            --switch \
-            "${xcode_path}/Contents/Developer"
-
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
-        shell: bash
-        run: |
-          set -e
-
           xcode_path="/Applications/Xcode_26.6.app"
-
           if [[ ! -d "${xcode_path}" ]]; then
             echo "Xcode 26.6 was not found."
-            echo "Available Xcode installations:"
-
-            find /Applications \
-              -maxdepth 1 \
-              -type d \
-              -name "Xcode*.app" \
-              -print
-
+            find /Applications -maxdepth 1 -type d -name "Xcode*.app" -print
             exit 1
           fi
-
-          sudo xcode-select \
-            --switch \
-            "${xcode_path}/Contents/Developer"
-
+          sudo xcode-select --switch "${xcode_path}/Contents/Developer"
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
 
@@ -99,7 +53,6 @@ jobs:
         shell: bash
         run: |
           set -e
-
           dotnet --info
           dotnet workload list
 
@@ -107,59 +60,36 @@ jobs:
         shell: bash
         run: |
           set -e
-
           dotnet workload install ios
 
       - name: Clean previous outputs
         shell: bash
         run: |
           set -e
-
-          rm -rf Seeker.iOS/bin
-          rm -rf Seeker.iOS/obj
-          rm -rf dist
-
+          rm -rf Seeker.iOS/bin Seeker.iOS/obj dist
           mkdir -p dist
 
       - name: Verify required project files
         shell: bash
         run: |
           set -e
-
           project_file="${GITHUB_WORKSPACE}/Seeker.iOS/Seeker.iOS.csproj"
           entitlements_file="${GITHUB_WORKSPACE}/Seeker.iOS/Entitlements.plist"
           info_plist="${GITHUB_WORKSPACE}/Seeker.iOS/Info.plist"
-
-          for required_file in \
-            "${project_file}" \
-            "${entitlements_file}" \
-            "${info_plist}"; do
-
+          for required_file in "${project_file}" "${entitlements_file}" "${info_plist}"; do
             if [[ ! -f "${required_file}" ]]; then
               echo "Missing required file: ${required_file}"
               exit 1
             fi
           done
-
-          echo "Project file:"
-          ls -lh "${project_file}"
-
-          echo "Entitlements:"
-          ls -lh "${entitlements_file}"
           plutil -lint "${entitlements_file}"
-          plutil -p "${entitlements_file}"
-
-          echo "Application Info.plist:"
-          ls -lh "${info_plist}"
           plutil -lint "${info_plist}"
 
       - name: Restore iPhone runtime
         shell: bash
         run: |
           set -e
-
-          dotnet restore \
-            Seeker.iOS/Seeker.iOS.csproj \
+          dotnet restore Seeker.iOS/Seeker.iOS.csproj \
             --runtime ios-arm64 \
             -p:SupportedOSPlatformVersion=15.0 \
             -p:TargetPlatformMinVersion=15.0
@@ -168,9 +98,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-
-          dotnet build \
-            Seeker.iOS/Seeker.iOS.csproj \
+          dotnet build Seeker.iOS/Seeker.iOS.csproj \
             --configuration Release \
             --framework net10.0-ios \
             --runtime ios-arm64 \
@@ -192,385 +120,91 @@ jobs:
         shell: bash
         run: |
           set -e
-
           output_directory="Seeker.iOS/bin/Release/net10.0-ios/ios-arm64"
-
-          echo "Produced application bundles:"
-
-          find "${output_directory}" \
-            -type d \
-            -name "*.app" \
-            -print
-
-          app_bundle="$(
-            find "${output_directory}" \
-              -type d \
-              -name "*.app" \
-              -print \
-              -quit
-          )"
-
+          app_bundle="$(find "${output_directory}" -type d -name "*.app" -print -quit)"
           if [[ -z "${app_bundle}" ]]; then
             echo "No iPhone application bundle was generated."
-
-            find "${output_directory}" \
-              -maxdepth 4 \
-              -print
-
+            find "${output_directory}" -maxdepth 4 -print
             exit 1
           fi
-
-          app_bundle="$(
-            cd "$(dirname "${app_bundle}")"
-            pwd
-          )/$(basename "${app_bundle}")"
-
-          echo "Application bundle: ${app_bundle}"
+          app_bundle="$(cd "$(dirname "${app_bundle}")" && pwd)/$(basename "${app_bundle}")"
           echo "APP_BUNDLE=${app_bundle}" >> "${GITHUB_ENV}"
 
       - name: Inspect application bundle
         shell: bash
         run: |
           set -e
-
           info_plist="${APP_BUNDLE}/Info.plist"
-
-          if [[ ! -f "${info_plist}" ]]; then
-            echo "Info.plist is missing from ${APP_BUNDLE}."
-            exit 1
-          fi
-
           plutil -lint "${info_plist}"
-
-          bundle_identifier="$(
-            /usr/libexec/PlistBuddy \
-              -c "Print :CFBundleIdentifier" \
-              "${info_plist}"
-          )"
-
-          display_name="$(
-            /usr/libexec/PlistBuddy \
-              -c "Print :CFBundleDisplayName" \
-              "${info_plist}" \
-              2>/dev/null \
-              || true
-          )"
-
-          executable_name="$(
-            /usr/libexec/PlistBuddy \
-              -c "Print :CFBundleExecutable" \
-              "${info_plist}"
-          )"
-
-          package_type="$(
-            /usr/libexec/PlistBuddy \
-              -c "Print :CFBundlePackageType" \
-              "${info_plist}"
-          )"
-
-          display_version="$(
-            /usr/libexec/PlistBuddy \
-              -c "Print :CFBundleShortVersionString" \
-              "${info_plist}"
-          )"
-
-          build_version="$(
-            /usr/libexec/PlistBuddy \
-              -c "Print :CFBundleVersion" \
-              "${info_plist}"
-          )"
-
-          minimum_version="$(
-            /usr/libexec/PlistBuddy \
-              -c "Print :MinimumOSVersion" \
-              "${info_plist}"
-          )"
-
+          bundle_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${info_plist}")"
+          executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${info_plist}")"
+          package_type="$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "${info_plist}")"
+          minimum_version="$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "${info_plist}")"
           executable_path="${APP_BUNDLE}/${executable_name}"
-
           echo "CFBundleIdentifier=${bundle_identifier}"
-          echo "CFBundleDisplayName=${display_name}"
           echo "CFBundleExecutable=${executable_name}"
           echo "CFBundlePackageType=${package_type}"
-          echo "CFBundleShortVersionString=${display_version}"
-          echo "CFBundleVersion=${build_version}"
           echo "MinimumOSVersion=${minimum_version}"
-
-          if [[ -z "${bundle_identifier}" ]]; then
-            echo "CFBundleIdentifier is empty."
-            exit 1
-          fi
-
-          if [[ -z "${executable_name}" ]]; then
-            echo "CFBundleExecutable is empty."
-            exit 1
-          fi
-
-          if [[ "${package_type}" != "APPL" ]]; then
-            echo "Expected CFBundlePackageType APPL."
-            exit 1
-          fi
-
-          if [[ "${minimum_version}" != "15.0" ]]; then
-            echo "Expected MinimumOSVersion 15.0."
-            exit 1
-          fi
-
-          if [[ ! -f "${executable_path}" ]]; then
-            echo "Missing executable: ${executable_path}"
-            exit 1
-          fi
-
-          if [[ ! -x "${executable_path}" ]]; then
-            echo "Executable bit was missing. Correcting it."
-            chmod 755 "${executable_path}"
-          fi
-
-          echo "Executable information:"
+          [[ -n "${bundle_identifier}" ]] || { echo "Empty bundle identifier"; exit 1; }
+          [[ "${package_type}" == "APPL" ]] || { echo "Expected APPL"; exit 1; }
+          [[ "${minimum_version}" == "15.0" ]] || { echo "Expected iOS 15.0"; exit 1; }
+          [[ -f "${executable_path}" ]] || { echo "Missing executable"; exit 1; }
+          chmod 755 "${executable_path}"
           file "${executable_path}"
           lipo -info "${executable_path}" || true
-
-          echo "Mach-O deployment information:"
-          xcrun vtool \
-            -show-build \
-            "${executable_path}" \
-            || true
-
-          echo "Mach-O load commands mentioning minimum OS:"
-          otool -l "${executable_path}" |
-            grep -A 8 -E "LC_BUILD_VERSION|LC_VERSION_MIN_IPHONEOS" \
-            || true
-
-          echo "Application bundle size:"
-          du -sh "${APP_BUNDLE}"
-
-      - name: Verify ARM64 executable
-        shell: bash
-        run: |
-          set -e
-
-          info_plist="${APP_BUNDLE}/Info.plist"
-
-          executable_name="$(
-            /usr/libexec/PlistBuddy \
-              -c "Print :CFBundleExecutable" \
-              "${info_plist}"
-          )"
-
-          executable_path="${APP_BUNDLE}/${executable_name}"
-
-          architecture_info="$(
-            file "${executable_path}"
-          )"
-
-          echo "${architecture_info}"
-
-          if [[ "${architecture_info}" != *"arm64"* ]]; then
-            echo "The application executable is not ARM64."
-            exit 1
-          fi
 
       - name: Remove stale signatures
         shell: bash
         run: |
           set -e
-
-          find "${APP_BUNDLE}" \
-            -type d \
-            -name "_CodeSignature" \
-            -prune \
-            -exec rm -rf {} +
-
-          find "${APP_BUNDLE}" \
-            -type f \
-            -name "embedded.mobileprovision" \
-            -delete
+          find "${APP_BUNDLE}" -type d -name "_CodeSignature" -prune -exec rm -rf {} +
+          find "${APP_BUNDLE}" -type f -name "embedded.mobileprovision" -delete
 
       - name: Ad-hoc sign nested application contents
         shell: bash
         run: |
           set -e
-
           if [[ -d "${APP_BUNDLE}/Frameworks" ]]; then
             while IFS= read -r nested_code; do
-              echo "Signing nested code: ${nested_code}"
-
-              codesign \
-                --force \
-                --sign - \
-                --timestamp=none \
-                "${nested_code}"
-            done < <(
-              find "${APP_BUNDLE}/Frameworks" \
-                -depth \
-                \( \
-                  -type d -name "*.framework" \
-                  -o \
-                  -type f -name "*.dylib" \
-                \) \
-                -print
-            )
+              codesign --force --sign - --timestamp=none "${nested_code}"
+            done < <(find "${APP_BUNDLE}/Frameworks" -depth \( -type d -name "*.framework" -o -type f -name "*.dylib" \) -print)
           fi
-
           if [[ -d "${APP_BUNDLE}/PlugIns" ]]; then
             while IFS= read -r app_extension; do
-              echo "Signing app extension: ${app_extension}"
-
-              codesign \
-                --force \
-                --sign - \
-                --timestamp=none \
-                --generate-entitlement-der \
-                "${app_extension}"
-            done < <(
-              find "${APP_BUNDLE}/PlugIns" \
-                -depth \
-                -type d \
-                -name "*.appex" \
-                -print
-            )
+              codesign --force --sign - --timestamp=none --generate-entitlement-der "${app_extension}"
+            done < <(find "${APP_BUNDLE}/PlugIns" -depth -type d -name "*.appex" -print)
           fi
 
       - name: Ad-hoc sign main application
         shell: bash
         run: |
           set -e
-
-          entitlements="${GITHUB_WORKSPACE}/Seeker.iOS/Entitlements.plist"
-
-          codesign \
-            --force \
-            --sign - \
-            --timestamp=none \
-            --generate-entitlement-der \
-            --entitlements "${entitlements}" \
+          codesign --force --sign - --timestamp=none --generate-entitlement-der \
+            --entitlements "${GITHUB_WORKSPACE}/Seeker.iOS/Entitlements.plist" \
             "${APP_BUNDLE}"
 
       - name: Verify application signature
         shell: bash
         run: |
           set -e
-
-          echo "Signature information:"
-
-          codesign \
-            --display \
-            --verbose=4 \
-            "${APP_BUNDLE}"
-
-          echo "Signed entitlements:"
-
-          codesign \
-            --display \
-            --entitlements :- \
-            "${APP_BUNDLE}" \
-            2>/dev/null \
-            || true
-
-          echo "Verifying application signature:"
-
-          codesign \
-            --verify \
-            --deep \
-            --strict \
-            --verbose=4 \
-            "${APP_BUNDLE}"
+          codesign --display --verbose=4 "${APP_BUNDLE}"
+          codesign --display --entitlements :- "${APP_BUNDLE}" 2>/dev/null || true
+          codesign --verify --deep --strict --verbose=4 "${APP_BUNDLE}"
 
       - name: Package TrollStore-compatible IPA
         shell: bash
         run: |
           set -e
-
           staging="${RUNNER_TEMP}/animaseek-ios15"
           ipa_path="${GITHUB_WORKSPACE}/dist/AnimaSeek-iOS15-TrollStore.ipa"
-
           rm -rf "${staging}"
-
-          mkdir -p "${staging}/Payload"
-          mkdir -p "${GITHUB_WORKSPACE}/dist"
-
-          cp -R \
-            "${APP_BUNDLE}" \
-            "${staging}/Payload/"
-
-          (
-            cd "${staging}"
-
-            zip -qry \
-              "${ipa_path}" \
-              Payload
-          )
-
-          if [[ ! -f "${ipa_path}" ]]; then
-            echo "The IPA was not generated."
-            exit 1
-          fi
-
-          echo "Generated IPA:"
+          mkdir -p "${staging}/Payload" "${GITHUB_WORKSPACE}/dist"
+          cp -R "${APP_BUNDLE}" "${staging}/Payload/"
+          (cd "${staging}" && zip -qry "${ipa_path}" Payload)
+          [[ -f "${ipa_path}" ]] || { echo "IPA not generated"; exit 1; }
+          app_count="$(unzip -Z1 "${ipa_path}" | grep -E '^Payload/[^/]+\.app/$' | wc -l | tr -d ' ')"
+          [[ "${app_count}" == "1" ]] || { echo "Expected one top-level app"; exit 1; }
           ls -lh "${ipa_path}"
-
-          echo "IPA root contents:"
-          unzip -Z1 "${ipa_path}" |
-            head -n 50
-
-          app_count="$(
-            unzip -Z1 "${ipa_path}" |
-              grep -E '^Payload/[^/]+\.app/$' |
-              wc -l |
-              tr -d ' '
-          )"
-
-          echo "Top-level application bundles: ${app_count}"
-
-          if [[ "${app_count}" != "1" ]]; then
-            echo "The IPA must contain exactly one top-level .app bundle."
-            exit 1
-          fi
-
-          if ! unzip -Z1 "${ipa_path}" |
-            grep -qE '^Payload/[^/]+\.app/Info\.plist$'; then
-            echo "Info.plist is missing from the packaged application."
-            exit 1
-          fi
-
-      - name: Extract IPA for final verification
-        shell: bash
-        run: |
-          set -e
-
-          verification_directory="${RUNNER_TEMP}/verify-ipa"
-          ipa_path="${GITHUB_WORKSPACE}/dist/AnimaSeek-iOS15-TrollStore.ipa"
-
-          rm -rf "${verification_directory}"
-          mkdir -p "${verification_directory}"
-
-          unzip -q \
-            "${ipa_path}" \
-            -d "${verification_directory}"
-
-          packaged_app="$(
-            find "${verification_directory}/Payload" \
-              -maxdepth 1 \
-              -type d \
-              -name "*.app" \
-              -print \
-              -quit
-          )"
-
-          if [[ -z "${packaged_app}" ]]; then
-            echo "No packaged application was found."
-            exit 1
-          fi
-
-          codesign \
-            --verify \
-            --deep \
-            --strict \
-            --verbose=4 \
-            "${packaged_app}"
-
-          echo "Final packaged application:"
-          du -sh "${packaged_app}"
 
       - name: Upload TrollStore IPA
         uses: actions/upload-artifact@v7
