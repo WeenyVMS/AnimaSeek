@@ -60,7 +60,8 @@ internal sealed class ReplySwipe : NSObject
             glyph.WidthAnchor.ConstraintEqualTo((nfloat)GlyphSize),
             glyph.HeightAnchor.ConstraintEqualTo((nfloat)GlyphSize),
         ]);
-        feedback = UIImpactFeedbackGenerator.GetFeedbackGenerator(UIImpactFeedbackStyle.Light, cell);
+       feedback = new UIImpactFeedbackGenerator(
+    UIImpactFeedbackStyle.Light);
         panDelegate = new PanDelegate(this);
         pan = new UIPanGestureRecognizer(HandlePan) { Delegate = panDelegate };
         cell.AddGestureRecognizer(pan);
