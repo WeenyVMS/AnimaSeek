@@ -1,36 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-ios</TargetFramework>
+  <TargetFramework>net10.0-ios</TargetFramework>
+  <RootNamespace>AnimaSeek.iOS</RootNamespace>
+  <AssemblyName>AnimaSeek</AssemblyName>
+  <OutputType>Exe</OutputType>
+  <Nullable>enable</Nullable>
+  <ImplicitUsings>true</ImplicitUsings>
+  <LangVersion>latest</LangVersion>
 
-    <RootNamespace>AnimaSeek.iOS</RootNamespace>
-    <AssemblyName>AnimaSeek</AssemblyName>
-    <OutputType>Exe</OutputType>
+  <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+  <TargetPlatformMinVersion>15.0</TargetPlatformMinVersion>
+  <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
 
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>true</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
+  <Configurations>Debug;Debug Mock;Release;Release Mock</Configurations>
+  <ApplicationTitle>AnimaSeek</ApplicationTitle>
+  <ApplicationId>com.animaseek.app</ApplicationId>
+  <ApplicationDisplayVersion>3.7.4</ApplicationDisplayVersion>
+  <ApplicationVersion>136</ApplicationVersion>
 
-    <!-- Compatibilité minimale recherchée -->
-    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
-    <TargetPlatformMinVersion>15.0</TargetPlatformMinVersion>
-
-    <!-- Construction pour un véritable iPhone -->
-    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
-
-    <Configurations>
-      Debug;Debug Mock;Release;Release Mock
-    </Configurations>
-
-    <ApplicationTitle>AnimaSeek</ApplicationTitle>
-    <ApplicationId>com.animaseek.app</ApplicationId>
-    <ApplicationDisplayVersion>3.7.4</ApplicationDisplayVersion>
-    <ApplicationVersion>136</ApplicationVersion>
-
-    <CodesignEntitlements>
-      Entitlements.plist
-    </CodesignEntitlements>
-  </PropertyGroup>
+  <CodesignEntitlements>Entitlements.plist</CodesignEntitlements>
+</PropertyGroup>
 
   <PropertyGroup Condition="$(Configuration.Contains('Mock'))">
     <DefineConstants>
